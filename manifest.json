@@ -1,0 +1,22 @@
+{
+  "name": "Branch Name Generator",
+  "manifest_version": 3,
+  "version": "1.0.0",
+  "description": "Generate Branch Names and PR titles based on Jira Tasks",
+  "permissions": [
+    "activeTab",
+    "scripting"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://dev.osf.digital/*"],
+      "css": ["background.css"]
+    }
+  ],
+  "action": {
+    "default_icon": "branch.png"
+  }
+}
