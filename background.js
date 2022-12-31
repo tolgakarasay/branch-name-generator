@@ -2,10 +2,11 @@ function runExtension() {
     var summaryEl = document.getElementById('summary-val');
     var taskNumEl = document.getElementById('key-val');
     var taskTypeEl = document.getElementById('type-val');
+    var issueHeaderContentEls = document.getElementsByClassName("issue-header-content");
 
     // Check if page has the required elements to run the script
-    if (!summaryEl || !taskNumEl || !taskTypeEl) {
-        console.log('task number, summary or task type not found');
+    if (!summaryEl || !taskNumEl || !taskTypeEl || issueHeaderContentEls.length === 0) {
+        console.log('Task number, summary, task type or issue header content not found. Branch name generator cannot work without these elements.');
         return;
     }
 
@@ -240,7 +241,7 @@ function runExtension() {
         var settings = generateSettingsPage();
         div.innerHTML = navbar + settings + home;
         div.setAttribute('id', 'bng-window');
-        document.getElementsByClassName('issue-header-content')[0].appendChild(div);
+        issueHeaderContentEls[0].appendChild(div);
 
         // Add toggle functionality settings button
         document.getElementById('settings-btn').addEventListener('click', displaySettingsPage, false);
@@ -403,7 +404,7 @@ function runExtension() {
 }
 
 chrome.action.onClicked.addListener((tab) => {
-    if (!tab.url.includes('chrome://')) {
+    if (tab.url.startsWith('https://dev.osf.digital')) {
         chrome.scripting.executeScript({
             target: { tabId: tab.id },
             function: runExtension
