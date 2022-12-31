@@ -404,10 +404,15 @@ function runExtension() {
 }
 
 chrome.action.onClicked.addListener((tab) => {
-    if (tab.url.startsWith('https://dev.osf.digital')) {
-        chrome.scripting.executeScript({
-            target: { tabId: tab.id },
-            function: runExtension
-        });
+    if (tab.url.startsWith("https://dev.osf.digital")) {
+      chrome.scripting.executeScript({
+        target: { tabId: tab.id },
+        function: runExtension,
+      });
+    } else {
+      chrome.action.setIcon({ path: "images/not_applicable.png" });
+      setTimeout(() => {
+        chrome.action.setIcon({ path: "images/icon32.png" });
+      }, 750);
     }
 });
