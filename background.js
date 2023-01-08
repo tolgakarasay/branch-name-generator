@@ -1,19 +1,38 @@
-function runExtension() {
+async function runExtension() {
+    // to be sure that page is loaded and we get the right element
+    function getElementAfterPageLoad(selector, numOfTriesLeft, timeoutInMs) {
+        return new Promise((resolve) => {
+            setTimeout(() => {
+                var element = document.querySelector(selector);
+                if (element != null && window.location.pathname.includes(element.getAttribute('data-issue-key'))) {
+                    resolve(element);
+                } else if (numOfTriesLeft > 0) {
+                    resolve(getElementAfterPageLoad(selector, numOfTriesLeft - 1, timeoutInMs));
+                } else {
+                    resolve(null);
+                }
+            }, timeoutInMs);
+        });
+    }
+
+    // Get required HTML elements before running the script
+    var taskNumEl = await getElementAfterPageLoad('#key-val', 20, 500);
     var summaryEl = document.getElementById('summary-val');
-    var taskNumEl = document.getElementById('key-val');
     var taskTypeEl = document.getElementById('type-val');
-    var issueHeaderContentEls = document.getElementsByClassName("issue-header-content");
+    var issueBodyContentEls = document.getElementsByClassName('issue-body-content');
+    var headerEl = document.getElementById('header');
 
     // Check if page has the required elements to run the script
-    if (!summaryEl || !taskNumEl || !taskTypeEl || issueHeaderContentEls.length === 0) {
-        console.log('Task number, summary, task type or issue header content not found. Branch name generator cannot work without these elements.');
+    if (!taskNumEl || !summaryEl || !taskTypeEl || issueBodyContentEls.length === 0 || !headerEl) {
+        console.log('Task number, summary, task type, issue body content or header element not found. Branch name generator cannot work without these elements.');
         return;
     }
 
-    var rawSummary = summaryEl.textContent;
     var taskNum = taskNumEl.textContent;
+    var rawSummary = summaryEl.textContent;
     var taskType = taskTypeEl.textContent;
     var projectKey = taskNum.split('-')[0];
+    var collapsed = true;
 
     if (!summaryEl.getAttribute('data-dev-type')) {
         summaryEl.setAttribute('data-dev-type', '{"BD":false, "FD":false, "TL":false, "SA":false}');
@@ -23,12 +42,23 @@ function runExtension() {
         summaryEl.setAttribute('data-keep-original-tags', 'false');
     }
 
-    // Activate / deactivate the extension by clicking the extension icon
-    var prInfoEl = document.getElementById('bng-window');
-    if (prInfoEl) {
-        prInfoEl.remove();
-    } else {
-        renderWindow();
+    // handle soft refresh triggered from search result links
+    var currentIssue = document.querySelector(`.issue-list li[data-key=${taskNum}]`);
+    if (currentIssue && !currentIssue.getAttribute("data-event-added")) {
+        currentIssue.setAttribute("data-event-added", true);
+        currentIssue.addEventListener("click", triggerRunExtension)
+    }
+    headerEl.setAttribute('data-previous-task-num', taskNum);
+
+    // Render extension window
+    renderWindow();
+
+    // trigger runExtension function on soft refresh
+    function triggerRunExtension(){
+        var previousTaskNum = headerEl.getAttribute('data-previous-task-num')
+        if(previousTaskNum === taskNum){
+            runExtension();
+        }
     }
 
     // get summary without original tags
@@ -203,7 +233,7 @@ function runExtension() {
     // Display home page
     function displayHomePage() {
         saveExtraTags();
-        document.getElementById('bng-window').remove();
+        collapsed = false;
         renderWindow();
         var home = document.getElementById('bng-window-home');
         var settings = document.getElementById('bng-window-settings');
@@ -220,7 +250,7 @@ function runExtension() {
     function displaySettingsPage() {
         // Not to lose the changes if the user clicks on settings link
         saveExtraTags();
-        document.getElementById('bng-window').remove();
+        collapsed = false;
         renderWindow();
         var home = document.getElementById('bng-window-home');
         var settings = document.getElementById('bng-window-settings');
@@ -235,13 +265,43 @@ function runExtension() {
 
     // Render extension window
     function renderWindow() {
-        var div = document.createElement('div');
+        // Remove the previous module if exists
+        if (document.getElementById('bng-module')) {
+            document.getElementById('bng-module').remove();
+        }
+        // Generate module content elements
         var navbar = generateNavbar();
         var home = generateHomePage();
         var settings = generateSettingsPage();
-        div.innerHTML = navbar + settings + home;
-        div.setAttribute('id', 'bng-window');
-        issueHeaderContentEls[0].appendChild(div);
+
+        // Define module content
+        var modContent = `<div id="bng-window" class="mod-content">${navbar + settings + home}</div>`;
+
+        // Define module header
+        var modHeader = `
+            <div id="bng-module_heading" class="mod-header">
+                <button class="aui-button toggle-title" aria-label="Branch Name Generator" aria-controls="bng-module" aria-expanded="true" resolved="">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14">
+                        <g fill="none" fill-rule="evenodd">
+                            <path
+                                d="M3.29175 4.793c-.389.392-.389 1.027 0 1.419l2.939 2.965c.218.215.5.322.779.322s.556-.107.769-.322l2.93-2.955c.388-.392.388-1.027 0-1.419-.389-.392-1.018-.392-1.406 0l-2.298 2.317-2.307-2.327c-.194-.195-.449-.293-.703-.293-.255 0-.51.098-.703.293z"
+                                fill="#344563"
+                            ></path>
+                        </g>
+                    </svg>
+                </button>
+                <h4 class="toggle-title" id="bng-module-label">Branch Name Generator</h4>
+            </div>
+        `;
+
+        // Create module element
+        var bngModule = document.createElement('div');
+        bngModule.setAttribute('class', `module toggle-wrap ${collapsed ? 'collapsed' : 'expanded'}`);
+        bngModule.setAttribute('id', 'bng-module');
+        bngModule.innerHTML = modHeader + modContent;
+
+        // Embed BNG module into the page
+        issueBodyContentEls[0].prepend(bngModule);
 
         // Add toggle functionality settings button
         document.getElementById('settings-btn').addEventListener('click', displaySettingsPage, false);
@@ -268,6 +328,9 @@ function runExtension() {
                 copyButtons[i].addEventListener('click', copyContentToClipboard, false);
             }
         }
+
+        // handle soft refresh through key-val element
+        document.getElementById('key-val').addEventListener('click', runExtension);
     }
 
     // Toggle developer type based on relevant checkbox
@@ -400,19 +463,30 @@ function runExtension() {
             return generateACoupleOfListItems('', '');
         }
     }
-
 }
 
 chrome.action.onClicked.addListener((tab) => {
-    if (tab.url.startsWith("https://dev.osf.digital")) {
-      chrome.scripting.executeScript({
-        target: { tabId: tab.id },
-        function: runExtension,
-      });
+    if (tab.url.startsWith('https://dev.osf.digital/browse') || tab.url.startsWith('https://dev.osf.digital/projects')) {
+        chrome.scripting.executeScript({
+            target: { tabId: tab.id },
+            function: runExtension
+        });
     } else {
-      chrome.action.setIcon({ path: "images/not_applicable.png" });
-      setTimeout(() => {
-        chrome.action.setIcon({ path: "images/icon32.png" });
-      }, 750);
+        chrome.action.setIcon({ path: 'images/not_applicable.png' });
+        setTimeout(() => {
+            chrome.action.setIcon({ path: 'images/icon32.png' });
+        }, 750);
+    }
+});
+
+chrome.tabs.onUpdated.addListener((tabID, changeInfo, tab) => {
+    if (!tab.url.startsWith('https://dev.osf.digital/browse') && !tab.url.startsWith('https://dev.osf.digital/projects')) {
+        return;
+    }
+    if (changeInfo.status === 'complete') {
+        chrome.scripting.executeScript({
+            target: { tabId: tabID },
+            function: runExtension
+        });
     }
 });
